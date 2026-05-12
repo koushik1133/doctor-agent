@@ -46,7 +46,7 @@ export default function PatientPage() {
     setPatientId(data.patient.id);
     setPatientName(data.patient.full_name);
     setStage("ready");
-    const greeting = `Hi ${data.patient.full_name.split(" ")[0]}, you're verified. I'm the after-hours assistant. Tap the mic and tell me what's going on.`;
+    const greeting = `Hey ${data.patient.full_name.split(" ")[0]}, I've got your chart pulled up. I'm your after-hours assistant — ask me anything about your medications, symptoms, or reports. What's going on?`;
     setHistory([{ role: "assistant", content: greeting }]);
     setStage("speaking");
     speak(greeting, () => setStage("ready"));

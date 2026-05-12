@@ -64,8 +64,8 @@ export async function POST(req: NextRequest) {
 
     const res = await groq.chat.completions.create({
       model: CHAT_MODEL,
-      temperature: 0.3,
-      max_tokens: 250,
+      temperature: 0.5,
+      max_tokens: 400,
       messages,
     });
     assistantText = res.choices[0]?.message?.content?.trim() || "I'm sorry, I didn't catch that — could you repeat?";
