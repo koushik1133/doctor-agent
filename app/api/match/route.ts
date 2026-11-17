@@ -12,6 +12,7 @@ const Body = z.object({
   zip: z.string().regex(/^\d{5}(-?\d{4})?$/, "Enter a 5-digit US ZIP code."),
   specialty: z.string().refine((s) => s in SPECIALTIES, "Unknown specialty."),
   radiusMiles: z.number().min(2).max(100).optional(),
+  limit: z.number().int().min(1).max(60).optional(),
 });
 
 export async function POST(req: NextRequest) {

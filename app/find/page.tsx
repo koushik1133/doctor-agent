@@ -7,6 +7,7 @@ import type { MatchResponse, MatchedDoctor } from "@/lib/matching/match";
 import type { SpecialtyId } from "@/lib/specialties";
 import { HighlightedDoc } from "@/components/HighlightedDoc";
 import { ScoreStrip } from "@/components/ScoreStrip";
+import { VisitSummary } from "@/components/VisitSummary";
 
 type AnalysisResponse = Analysis & { documents: { name: string; method: string; chars: number }[] };
 
@@ -30,6 +31,7 @@ export default function FindPage() {
   const [results, setResults] = useState<MatchResponse | null>(null);
   const [active, setActive] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [chosen, setChosen] = useState<MatchedDoctor | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const reviewRef = useRef<HTMLElement>(null);
   const resultsRef = useRef<HTMLElement>(null);
@@ -81,7 +83,7 @@ export default function FindPage() {
       const res = await fetch("/api/match", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ zip, specialty, radiusMiles: radius }),
+        body: JSON.stringify({ zip, specialty, radiusMiles: radius, limit: 60 }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Search failed.");
@@ -95,7 +97,9 @@ export default function FindPage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 pb-24 pt-10 sm:px-6 lg:grid lg:grid-cols-[13rem_1fr] lg:gap-12">
+    <>
+    {analysis && <VisitSummary analysis={analysis} notes={notes} doctor={chosen} />}
+    <main className="mx-auto max-w-6xl px-4 pb-24 pt-10 sm:px-6 print:hidden lg:grid lg:grid-cols-[13rem_1fr] lg:gap-12">
       <aside className="mb-8 lg:mb-0">
         <ol className="flex gap-4 overflow-x-auto text-[14px] lg:sticky lg:top-24 lg:flex-col lg:gap-5" aria-label="Progress">
           {STEPS.map((s, i) => (
@@ -215,6 +219,9 @@ export default function FindPage() {
               {analysis.documents.length ? `${analysis.documents.length} document${analysis.documents.length > 1 ? "s" : ""}, ` : ""}
               {analysis.wordCount.toLocaleString()} words read. Highlighted passages are what drove the recommendation — hover one to see what it means.
             </p>
+            <button type="button" onClick={() => window.print()} className="mt-3 text-[15px] font-bold text-pine underline underline-offset-4">
+              Print a summary for your doctor
+            </button>
 
             {analysis.urgency === "emergency" && (
               <div role="alert" className="mt-6 rounded-xl border-2 border-alert bg-alert-wash p-5">
@@ -377,28 +384,14 @@ export default function FindPage() {
             </h2>
             <p className="mt-2 max-w-[70ch] text-[15px] text-ink-2">
               {results.withinRadius} of {results.searched} registered {results.specialty.label.toLowerCase()} doctors in the area are within {results.radiusMiles} miles.
-              Showing the top {results.doctors.length}, ranked on outcomes, quality, experience, distance and fit. Hatched bars mean no public data.
+              We scored the closest ones on outcomes, quality, experience, distance and fit. Hatched bars mean no public data.
             </p>
             {!results.doctors.length && (
               <p className="mt-4 text-[15px]">Try a larger radius, or a primary care doctor who can refer you.</p>
             )}
             {results.doctors.length > 0 && (
-              <p className="mt-8 hidden grid-cols-[2.5rem_1fr_12rem_4.5rem] gap-x-4 px-5 text-[12px] text-ink-3 sm:grid" aria-hidden="true">
-                <span />
-                <span />
-                <span className="grid grid-cols-5 gap-1.5">
-                  {["Outcome", "Quality", "Exp.", "Dist.", "Fit"].map((l) => (
-                    <span key={l}>{l}</span>
-                  ))}
-                </span>
-                <span className="text-right">Score</span>
-              </p>
+              <ResultsList doctors={results.doctors} zip={zip} conditions={analysis.conditions.map((c) => c.name)} onChoose={setChosen} />
             )}
-            <ol className="mt-2 grid gap-3">
-              {results.doctors.map((d, i) => (
-                <DoctorRow key={d.npi} d={d} rank={i + 1} zip={zip} conditions={analysis.conditions.map((c) => c.name)} />
-              ))}
-            </ol>
             <p className="mt-8 text-[13px] text-ink-3">Data: {results.sources.join(" · ")}. Retrieved live in {(results.tookMs / 1000).toFixed(1)}s.</p>
           </section>
         )}
@@ -408,6 +401,107 @@ export default function FindPage() {
         </p>
       </div>
     </main>
+    </>
+  );
+}
+
+type SortKey = "best" | "nearest" | "quality" | "outcomes";
+const SORTS: { id: SortKey; label: string }[] = [
+  { id: "best", label: "Best match" },
+  { id: "nearest", label: "Nearest" },
+  { id: "outcomes", label: "Best outcomes" },
+  { id: "quality", label: "Highest quality score" },
+];
+const comp = (d: MatchedDoctor, k: string) => d.score.components.find((c) => c.key === k)?.value ?? -1;
+
+function ResultsList({ doctors, zip, conditions, onChoose }: { doctors: MatchedDoctor[]; zip: string; conditions: string[]; onChoose: (d: MatchedDoctor) => void }) {
+  const [sort, setSort] = useState<SortKey>("best");
+  const [f, setF] = useState({ verified: false, video: false, hospital4: false, quality: false });
+  const [shown, setShown] = useState(15);
+
+  const rankOf = new Map(doctors.map((d, i) => [d.npi, i + 1]));
+  const list = doctors
+    .filter((d) => (!f.verified || d.platform?.verified) && (!f.video || d.platform?.telehealth) && (!f.hospital4 || (d.hospital?.rating ?? 0) >= 4) && (!f.quality || d.mipsScore !== undefined))
+    .sort((a, b) =>
+      sort === "nearest" ? a.distanceMiles - b.distanceMiles || b.score.total - a.score.total
+      : sort === "quality" ? (b.mipsScore ?? -1) - (a.mipsScore ?? -1)
+      : sort === "outcomes" ? comp(b, "outcomes") - comp(a, "outcomes")
+      : b.score.total - a.score.total,
+    );
+  const counts = {
+    verified: doctors.filter((d) => d.platform?.verified).length,
+    video: doctors.filter((d) => d.platform?.telehealth).length,
+    hospital4: doctors.filter((d) => (d.hospital?.rating ?? 0) >= 4).length,
+    quality: doctors.filter((d) => d.mipsScore !== undefined).length,
+  };
+  const FILTERS: { id: keyof typeof f; label: string }[] = [
+    { id: "hospital4", label: "Hospital rated 4★ or higher" },
+    { id: "quality", label: "Has a Medicare quality score" },
+    { id: "verified", label: "Verified on Referral Desk" },
+    { id: "video", label: "Offers video visits" },
+  ];
+
+  return (
+    <>
+      <div className="mt-8 flex flex-wrap items-end justify-between gap-4 border-b border-rule pb-4">
+        <fieldset className="flex flex-wrap gap-2">
+          <legend className="sr-only">Filter doctors</legend>
+          {FILTERS.map((x) => (
+            <label
+              key={x.id}
+              className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-[14px] transition-colors ${
+                f[x.id] ? "border-pine bg-pine font-bold text-pine-ink" : "border-rule bg-surface text-ink-2 hover:border-ink-3"
+              } ${counts[x.id] === 0 ? "pointer-events-none opacity-40" : ""}`}
+            >
+              <input type="checkbox" className="sr-only" checked={f[x.id]} disabled={counts[x.id] === 0} onChange={(e) => { setF({ ...f, [x.id]: e.target.checked }); setShown(15); }} />
+              {f[x.id] && <span aria-hidden="true">✓</span>}
+              {x.label} <span className={`tabular-nums ${f[x.id] ? "text-pine-ink/80" : "text-ink-3"}`}>{counts[x.id]}</span>
+            </label>
+          ))}
+        </fieldset>
+        <label className="flex items-center gap-2 text-[14px]">
+          <span className="text-ink-2">Sort</span>
+          <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="rounded-lg border border-rule bg-surface px-2 py-1.5 focus:border-pine focus:outline-none">
+            {SORTS.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <p className="mt-3 text-[14px] text-ink-2" aria-live="polite">
+        {list.length === doctors.length ? `${doctors.length} doctors` : `${list.length} of ${doctors.length} doctors match these filters`}
+        {sort !== "best" ? ". Numbers show each doctor's overall match rank." : "."}
+      </p>
+
+      {list.length > 0 && (
+        <p className="mt-4 hidden grid-cols-[2.5rem_1fr_12rem_4.5rem] gap-x-4 px-5 text-[12px] text-ink-3 sm:grid" aria-hidden="true">
+          <span />
+          <span />
+          <span className="grid grid-cols-5 gap-1.5">
+            {["Out.", "Qual.", "Exp.", "Dist.", "Fit"].map((l) => (
+              <span key={l}>{l}</span>
+            ))}
+          </span>
+          <span className="text-right">Score</span>
+        </p>
+      )}
+      <ol className="mt-2 grid gap-3">
+        {list.slice(0, shown).map((d) => (
+          <DoctorRow key={d.npi} d={d} rank={rankOf.get(d.npi)!} zip={zip} conditions={conditions} onChoose={onChoose} />
+        ))}
+      </ol>
+      {list.length === 0 && (
+        <p className="mt-6 rounded-lg border border-dashed border-rule p-6 text-ink-2">
+          No doctors match all of these filters. Turn one off, or widen the search radius.
+        </p>
+      )}
+      {list.length > shown && (
+        <button type="button" onClick={() => setShown((n) => n + 15)} className="mt-5 rounded-lg border border-ink px-4 py-2 font-bold">
+          Show {Math.min(15, list.length - shown)} more
+        </button>
+      )}
+    </>
   );
 }
 
@@ -421,7 +515,7 @@ function Stars({ n }: { n?: number }) {
   );
 }
 
-function DoctorRow({ d, rank, zip, conditions }: { d: MatchedDoctor; rank: number; zip: string; conditions: string[] }) {
+function DoctorRow({ d, rank, zip, conditions, onChoose }: { d: MatchedDoctor; rank: number; zip: string; conditions: string[]; onChoose: (d: MatchedDoctor) => void }) {
   const [open, setOpen] = useState(false);
   const [referral, setReferral] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -438,7 +532,10 @@ function DoctorRow({ d, rank, zip, conditions }: { d: MatchedDoctor; rank: numbe
     });
     const data = await res.json();
     setSending(false);
-    if (res.ok) setReferral(data.id);
+    if (res.ok) {
+      setReferral(data.id);
+      onChoose(d);
+    }
     else setReferError(data.error || "Couldn't save the referral.");
   }
 
@@ -524,6 +621,9 @@ function DoctorRow({ d, rank, zip, conditions }: { d: MatchedDoctor; rank: numbe
                     Open your follow-up page
                   </Link>
                 </p>
+                <button type="button" onClick={() => window.print()} className="mt-2 font-bold text-pine underline underline-offset-2">
+                  Print a summary to bring to {d.name}
+                </button>
               </div>
             ) : unavailable ? (
               <p className="rounded-lg bg-warn-wash p-3 text-ink">

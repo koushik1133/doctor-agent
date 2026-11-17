@@ -140,3 +140,14 @@ mark.finding[data-active="true"] {
   min-height: 100vh;
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
+
+@media print {
+  @page {
+    margin: 16mm 18mm;
+  }
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11pt;
+  }
+}

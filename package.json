@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:live": "LIVE=1 vitest run tests/live.test.ts",
     "validate:analyzer": "tsx scripts/validate-analyzer.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "node scripts/icloud-ignore.mjs"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.1.1",

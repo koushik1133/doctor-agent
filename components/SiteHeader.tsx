@@ -13,7 +13,7 @@ export function SiteHeader() {
   const path = usePathname();
   if (path?.startsWith("/patient") || path?.startsWith("/doctor/") || path === "/doctor") return null;
   return (
-    <header className="border-b border-rule bg-paper/90 backdrop-blur supports-[backdrop-filter]:bg-paper/75 sticky top-0 z-30">
+    <header className="print:hidden border-b border-rule bg-paper/90 backdrop-blur supports-[backdrop-filter]:bg-paper/75 sticky top-0 z-30">
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:gap-6 sm:px-6">
         <Link href="/" className="flex shrink-0 items-center gap-2 whitespace-nowrap font-display text-[17px] font-semibold tracking-tight sm:text-[19px]">
           <Mark />

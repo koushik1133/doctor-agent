@@ -20,6 +20,8 @@ Two products in one app:
 | Success rate | Patients report how they're doing after the visit (`/referral/[id]`); this blends into the outcomes score with a Beta(2,2) prior so it only moves as evidence accumulates. | Platform data |
 | Doctor capacity | Each verified doctor sets new patients per week; referrals are counted over a rolling 7 days and refused (409) when full or paused. Patients see "Full this week" / spots left. | Platform data |
 | Doctor portal | `/doctors/manage#<token>` — private link shown once at sign-up (only a SHA-256 hash is stored; admins can reissue). Doctors pause intake, change capacity, see referrals and outcomes. | Platform data |
+| Results | Filter by hospital rating, Medicare quality score, verified, video visits; sort by best match, nearest, outcomes or quality. | — |
+| Visit summary | One-click printable page for the patient to bring: reason for referral, conditions with ICD-10, abnormal labs, procedures, their own notes, suggested questions. Built in the browser; nothing extra stored. | — |
 | Doctor onboarding | NPI check digit, registry match on name / status / taxonomy / license / location, CMS footprint → `verified`, `needs_review`, or `rejected`. Reviewers can't approve a failed identity check. | CMS NPPES, CMS provider data |
 
 There is no public per-doctor "success rate" in the US, so the app doesn't invent one — every number in the
@@ -35,7 +37,8 @@ transcribed reports labelled by specialty. The lexicon was tuned on even rows on
 |---|---:|---:|
 | Initial rules | 39.3% | 45.7% |
 | + negation, sections, broader lexicon | 56.5% | 67.2% |
-| + procedure/test signals | **64.0%** | **75.7%** (84.0% when any finding exists) |
+| + procedure/test signals | 64.0% | 75.7% |
+| + foot/ankle, tendon, stroke, spinal cord, gait | **65.6%** | **78.1%** (85.3% when any finding exists) |
 
 Weakest: nephrology (54.8% top-3) — MTSamples files much urologic surgery (stones, bladder tumours) under
 "Nephrology"; the mapping is left strict rather than tuned to the dataset.
@@ -43,6 +46,9 @@ Weakest: nephrology (54.8% top-3) — MTSamples files much urologic surgery (sto
 Full per-specialty tables: `validation/analyzer-report-holdout.md`.
 
 ### Tests
+
+CI (`.github/workflows/ci.yml`) runs typecheck, unit tests and build on every push and PR, and the live
+government-data suite nightly so an upstream API change shows up as a failing check.
 
 ```bash
 npm test            # unit tests (analyzer, PDF extraction, NPI/name/license matching, scoring)
