@@ -1,10 +1,142 @@
 @import "tailwindcss";
 
-:root { color-scheme: light dark; }
+/*
+  Design tokens — "chart room"
+  paper   cool sage-white, like exam-room paper
+  ink     green-black for text
+  pine    the one brand color: actions, links, scores
+  marker  highlighter yellow — used ONLY for findings pulled from a document
+  alert   red flags and failed checks
+*/
+:root {
+  --paper: #f3f6f4;
+  --surface: #ffffff;
+  --ink: #15211d;
+  --ink-2: #4a5a54;
+  --ink-3: #7a8a84;
+  --rule: #d3ddd8;
+  --pine: #1e5b4a;
+  --pine-ink: #ffffff;
+  --pine-wash: #e0ece6;
+  --marker: #f6e26b;
+  --marker-ink: #3d3300;
+  --alert: #b23a2f;
+  --alert-wash: #f8e5e2;
+  --warn: #9a6a00;
+  --warn-wash: #f8efd6;
+  color-scheme: light;
+}
 
-html, body { height: 100%; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #101a17;
+    --surface: #16231f;
+    --ink: #e6eeea;
+    --ink-2: #a9bab3;
+    --ink-3: #7d8f88;
+    --rule: #2a3a35;
+    --pine: #6fc3a4;
+    --pine-ink: #0b1512;
+    --pine-wash: #1c3029;
+    --marker: rgba(226, 200, 72, 0.34);
+    --marker-ink: inherit;
+    --alert: #f08a7e;
+    --alert-wash: #3a1f1c;
+    --warn: #e2b55a;
+    --warn-wash: #352b16;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-pine: var(--pine);
+  --color-pine-ink: var(--pine-ink);
+  --color-pine-wash: var(--pine-wash);
+  --color-marker: var(--marker);
+  --color-marker-ink: var(--marker-ink);
+  --color-alert: var(--alert);
+  --color-alert-wash: var(--alert-wash);
+  --color-warn: var(--warn);
+  --color-warn-wash: var(--warn-wash);
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-atkinson), ui-sans-serif, system-ui, sans-serif;
+}
+
+html,
 body {
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  min-height: 100%;
+}
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+:focus-visible {
+  outline: 3px solid var(--pine);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* The highlighter: findings pulled from the patient's own document. */
+mark.finding {
+  background: linear-gradient(transparent 12%, var(--marker) 12%, var(--marker) 88%, transparent 88%);
+  color: inherit;
+  padding: 0 0.12em;
+  margin: 0 -0.04em;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+mark.finding[data-kind="flag"] {
+  background: linear-gradient(transparent 12%, var(--alert-wash) 12%, var(--alert-wash) 88%, transparent 88%);
+  box-shadow: inset 0 -2px 0 var(--alert);
+}
+mark.finding[data-active="true"] {
+  box-shadow: inset 0 -3px 0 var(--ink);
+}
+
+/* One orchestrated moment: the marker sweeps across findings once on reveal. */
+@media (prefers-reduced-motion: no-preference) {
+  .sweep mark.finding {
+    background-size: 0% 100%;
+    background-repeat: no-repeat;
+    animation: sweep 700ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+    animation-delay: calc(var(--i, 0) * 90ms + 150ms);
+  }
+  @keyframes sweep {
+    to {
+      background-size: 100% 100%;
+    }
+  }
+}
+
+/* Legacy triage screens keep their original dark styling. */
+.legacy-dark {
   background: #0b0d10;
   color: #e7eaee;
+  min-height: 100vh;
+  font-family: ui-sans-serif, system-ui, sans-serif;
 }

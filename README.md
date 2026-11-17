@@ -1,5 +1,74 @@
 # Doctor Agent
 
+Two products in one app:
+
+1. **Referral Desk** (`/find`, `/doctors/join`, `/admin`) — patients upload their records; the app works out which
+   specialist they need and ranks nearby doctors on public CMS quality and outcome data. Doctors apply with their NPI
+   and are verified against the federal registry automatically.
+2. **After-hours triage** (`/patient`, `/doctor`) — the original voice assistant, described further down.
+
+## Referral Desk
+
+### How it works
+
+| Step | What happens | Real-world data source |
+|---|---|---|
+| Upload | PDF / DOCX / TXT parsed in memory. Photos and scanned PDFs are OCR'd locally with Tesseract (no key, nothing leaves the server; Groq vision is used instead if `GROQ_API_KEY` is set). Nothing is stored. | — |
+| Analyse | Section-aware clinical rules: ~100 conditions, 16 procedure/test families (weighted below diagnoses), 11 lab analytes with thresholds, negation ("denies chest pain"), family vs. past history, red flags. Diagnosis lines outside the lexicon are looked up live. | NLM ICD-10-CM (every code validated live) |
+| Match | Doctors with the right NUCC taxonomy in the patient's ZIP area, filtered by distance. | CMS NPPES NPI Registry, Zippopotam.us |
+| Rank | Outcomes 35% · Quality 25% · Experience 15% · Distance 15% · Fit 10%. Missing data lowers the score. | CMS Hospital General Info (star rating, mortality), PY2024 MIPS, Doctors & Clinicians utilization + facility affiliation |
+| Success rate | Patients report how they're doing after the visit (`/referral/[id]`); this blends into the outcomes score with a Beta(2,2) prior so it only moves as evidence accumulates. | Platform data |
+| Doctor capacity | Each verified doctor sets new patients per week; referrals are counted over a rolling 7 days and refused (409) when full or paused. Patients see "Full this week" / spots left. | Platform data |
+| Doctor portal | `/doctors/manage#<token>` — private link shown once at sign-up (only a SHA-256 hash is stored; admins can reissue). Doctors pause intake, change capacity, see referrals and outcomes. | Platform data |
+| Doctor onboarding | NPI check digit, registry match on name / status / taxonomy / license / location, CMS footprint → `verified`, `needs_review`, or `rejected`. Reviewers can't approve a failed identity check. | CMS NPPES, CMS provider data |
+
+There is no public per-doctor "success rate" in the US, so the app doesn't invent one — every number in the
+ranking comes from a named dataset and the UI shows which.
+
+### Validation on real data
+
+`npm run validate:analyzer -- /path/to/mtsamples.csv` scores the analyzer on
+[MTSamples](https://raw.githubusercontent.com/socd06/medical-nlp/master/data/mtsamples.csv) — ~5,000 real de-identified
+transcribed reports labelled by specialty. The lexicon was tuned on even rows only; odd rows are the held-out set.
+
+| Held-out (1,025 reports, 17 specialties) | Top-1 | Top-3 |
+|---|---:|---:|
+| Initial rules | 39.3% | 45.7% |
+| + negation, sections, broader lexicon | 56.5% | 67.2% |
+| + procedure/test signals | **64.0%** | **75.7%** (84.0% when any finding exists) |
+
+Weakest: nephrology (54.8% top-3) — MTSamples files much urologic surgery (stones, bladder tumours) under
+"Nephrology"; the mapping is left strict rather than tuned to the dataset.
+
+Full per-specialty tables: `validation/analyzer-report-holdout.md`.
+
+### Tests
+
+```bash
+npm test            # unit tests (analyzer, PDF extraction, NPI/name/license matching, scoring)
+npm run test:live   # hits NPPES, CMS and NLM: ICD codes exist, real doctors verify, impostors are rejected,
+                    # matching returns enriched results in SF / NYC / Chicago / Houston
+```
+
+Live testing found and fixed: a corrupt image upload crashing the Node process via an uncaught
+tesseract.js worker error; a retired ICD-10 code (G35 → G35.D), an NPI with a foreign practice address
+passing the location check, and verified doctors being dropped past the enrichment cap.
+
+### Running it
+
+> **iCloud / Dropbox warning.** This folder sits on an iCloud-synced Desktop. With "Optimize Mac Storage" on, macOS
+> offloads files it thinks are unused — it offloaded 12,000+ files in `node_modules` overnight, which made `tsc`,
+> `next dev` and git hang on reads. Caches now live in the system temp dir, but keep the project itself outside
+> Desktop/Documents (e.g. `~/code/doctor-agent`), or rerun `rm -rf node_modules .next && npm ci` if it happens again.
+
+
+No keys needed for Referral Desk — `npm install && npm run dev`, then open `/find`. Applications and referrals go to
+`data/store.json` unless Supabase is configured (tables in `supabase/schema.sql`). Set `ADMIN_TOKEN` before deploying.
+
+---
+
+## After-hours triage
+
 After-hours triage assistant. Patients verify their identity, talk to an AI by voice
 in the browser, and the assistant pulls their chart, classifies urgency
 (emergency / urgent / routine / info), escalates emergencies, and logs everything

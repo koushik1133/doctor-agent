@@ -1,0 +1,13 @@
+QUEST DIAGNOSTICS — LAB REPORT
+Collected: 09/30/2026
+
+Hemoglobin A1c          9.4 %        (ref 4.0-5.6)   HIGH
+Fasting glucose         212 mg/dL    (ref 65-99)     HIGH
+LDL Cholesterol         148 mg/dL
+eGFR                    54 mL/min/1.73m2             LOW
+Creatinine              1.42 mg/dL                   HIGH
+ALT                     38 U/L
+TSH                     2.1 mIU/L
+
+Clinician comment: Type 2 diabetes mellitus, poorly controlled. Early chronic kidney disease stage 3a.
+No retinopathy on last eye exam. Patient denies chest pain.

@@ -44,3 +44,26 @@ create table if not exists messages (
 create index if not exists idx_records_patient on records(patient_id);
 create index if not exists idx_messages_call on messages(call_id);
 create index if not exists idx_calls_patient on calls(patient_id);
+
+-- ── Doctor matching marketplace ─────────────────────────────────────────────
+-- Doctor applications (verified against NPPES on submit) and patient referrals
+-- with outcome feedback. The full record lives in `data`; key columns are
+-- broken out for filtering.
+
+create table if not exists doctor_applications (
+  id uuid primary key,
+  npi text not null unique,
+  status text not null,          -- 'verified' | 'needs_review' | 'rejected'
+  created_at timestamptz default now(),
+  data jsonb not null
+);
+
+create table if not exists referrals (
+  id uuid primary key,
+  npi text not null,
+  created_at timestamptz default now(),
+  data jsonb not null            -- includes outcome { result, rating, at } once reported
+);
+
+create index if not exists idx_referrals_npi on referrals(npi);
+create index if not exists idx_doctor_applications_status on doctor_applications(status);
