@@ -8,6 +8,7 @@ import type { SpecialtyId } from "@/lib/specialties";
 import { HighlightedDoc } from "@/components/HighlightedDoc";
 import { ScoreStrip } from "@/components/ScoreStrip";
 import { VisitSummary } from "@/components/VisitSummary";
+import { RequestForm, type RequestPayload } from "@/components/RequestForm";
 
 type AnalysisResponse = Analysis & { documents: { name: string; method: string; chars: number }[] };
 
@@ -520,23 +521,33 @@ function DoctorRow({ d, rank, zip, conditions, onChoose }: { d: MatchedDoctor; r
   const [referral, setReferral] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [referError, setReferError] = useState<string | null>(null);
+  const [requesting, setRequesting] = useState(false);
+  const [requested, setRequested] = useState(false);
   const cap = d.platform?.capacity;
   const unavailable = d.platform?.verified && cap && !cap.accepting;
+  const canRequest = d.platform?.verified && !unavailable;
 
-  async function refer() {
+  // Returns an error message, or null on success.
+  async function refer(request?: RequestPayload): Promise<string | null> {
     setSending(true);
+    setReferError(null);
     const res = await fetch("/api/referrals", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ npi: d.npi, doctorName: d.name, specialty: d.specialty, conditions: conditions.slice(0, 20), patientZip: zip }),
+      body: JSON.stringify({ npi: d.npi, doctorName: d.name, specialty: d.specialty, conditions: conditions.slice(0, 20), patientZip: zip, request }),
     });
     const data = await res.json();
     setSending(false);
-    if (res.ok) {
-      setReferral(data.id);
-      onChoose(d);
+    if (!res.ok) {
+      const msg = data.error || "Couldn't save the referral.";
+      if (!request) setReferError(msg);
+      return msg;
     }
-    else setReferError(data.error || "Couldn't save the referral.");
+    setReferral(data.id);
+    setRequested(Boolean(request));
+    setRequesting(false);
+    onChoose(d);
+    return null;
   }
 
   const phone = d.address.phone?.replace(/[^\d]/g, "");
@@ -571,6 +582,11 @@ function DoctorRow({ d, rank, zip, conditions, onChoose }: { d: MatchedDoctor; r
                 </span>
               )}
               {d.platform.telehealth && <span className="rounded-full border border-rule px-2 py-0.5 text-ink-2">Video visits</span>}
+              {d.platform.responseHours != null && (
+                <span className="rounded-full border border-rule px-2 py-0.5 text-ink-2">
+                  Usually replies in {d.platform.responseHours < 24 ? `${Math.max(1, Math.round(d.platform.responseHours))} h` : `${Math.round(d.platform.responseHours / 24)} days`}
+                </span>
+              )}
             </span>
           )}
         </span>
@@ -613,14 +629,17 @@ function DoctorRow({ d, rank, zip, conditions, onChoose }: { d: MatchedDoctor; r
               NPI {d.npi} in the federal registry
             </a>
             {referral ? (
-              <div className="rounded-lg bg-pine-wash p-3 text-ink">
-                <p className="font-bold">Referral saved</p>
+              <div className="rounded-lg bg-pine-wash p-3 text-ink" role="status">
+                <p className="font-bold">{requested ? "Request sent" : "Referral saved"}</p>
                 <p className="mt-1">
-                  After your visit, tell us how it went — it improves rankings for the next patient.{" "}
+                  {requested
+                    ? "The office will contact you. Check your follow-up page for their reply, and after the visit tell us how it went."
+                    : "After your visit, tell us how it went — it improves rankings for the next patient."}{" "}
                   <Link href={`/referral/${referral}`} className="font-bold text-pine underline underline-offset-2">
                     Open your follow-up page
                   </Link>
                 </p>
+                <p className="mt-1 text-[13px] text-ink-2">Bookmark that page — it&apos;s the only way back to this referral.</p>
                 <button type="button" onClick={() => window.print()} className="mt-2 font-bold text-pine underline underline-offset-2">
                   Print a summary to bring to {d.name}
                 </button>
@@ -631,15 +650,33 @@ function DoctorRow({ d, rank, zip, conditions, onChoose }: { d: MatchedDoctor; r
                   ? `This doctor's new-patient spots are full${cap!.nextOpening ? ` until ${new Date(cap!.nextOpening).toLocaleDateString()}` : ""}. You can still call the office.`
                   : "This doctor has paused new patients."}
               </p>
+            ) : canRequest ? (
+              !requesting && (
+                <>
+                  <button type="button" onClick={() => setRequesting(true)} className="rounded-lg bg-pine px-4 py-2.5 font-bold text-pine-ink">
+                    Request an appointment
+                  </button>
+                  <button type="button" onClick={() => refer()} disabled={sending} className="text-left text-ink-2 underline underline-offset-2 disabled:opacity-50">
+                    {sending ? "Saving…" : "Just save the referral"}
+                  </button>
+                  {referError && <p role="alert" className="text-alert">{referError}</p>}
+                </>
+              )
             ) : (
               <>
-                <button type="button" onClick={refer} disabled={sending} className="rounded-lg bg-ink px-4 py-2.5 font-bold text-paper disabled:opacity-50">
+                <button type="button" onClick={() => refer()} disabled={sending} className="rounded-lg bg-ink px-4 py-2.5 font-bold text-paper disabled:opacity-50">
                   {sending ? "Saving…" : "Save this referral"}
                 </button>
+                <p className="text-[13px] text-ink-3">This doctor hasn&apos;t joined Referral Desk — call the office to book.</p>
                 {referError && <p role="alert" className="text-alert">{referError}</p>}
               </>
             )}
           </div>
+          {requesting && !referral && (
+            <div className="sm:col-span-2">
+              <RequestForm doctorName={d.name} onSubmit={(r) => refer(r)} onCancel={() => setRequesting(false)} />
+            </div>
+          )}
         </div>
       )}
     </li>

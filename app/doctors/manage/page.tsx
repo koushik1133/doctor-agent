@@ -5,11 +5,14 @@ import Link from "next/link";
 import type { DoctorApplication, Capacity } from "@/lib/store";
 import { SPECIALTIES } from "@/lib/specialties";
 import { CheckList } from "@/components/CheckList";
+import { RequestInbox, type InboxItem } from "@/components/RequestInbox";
 
 type Data = {
   application: Omit<DoctorApplication, "manageTokenHash">;
   capacity: Capacity;
   success: { rate: number; n: number; avgRating?: number } | null;
+  requests: InboxItem[];
+  responseHours: number | null;
   referrals: { id: string; createdAt: string; conditions: string[]; patientZip: string; outcome: { result: string; rating: number; at: string } | null }[];
 };
 
@@ -132,9 +135,14 @@ export default function ManagePage() {
       </section>
 
       <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_22rem]">
+        <div className="grid content-start gap-12">
+        <RequestInbox items={data.requests} token={token} onChange={() => load(token)} />
         <section aria-labelledby="refs">
-          <h2 id="refs" className="text-[22px] font-semibold">Referrals</h2>
-          <p className="mt-1 text-[14px] text-ink-2">Patients contact your office directly. We share only the conditions their records pointed to and their ZIP code.</p>
+          <h2 id="refs" className="text-[22px] font-semibold">All referrals</h2>
+          <p className="mt-1 text-[14px] text-ink-2">
+            Every patient who chose you, including those who called your office directly. Only conditions and ZIP are shown here.
+            {data.responseHours != null && ` Your median reply time is ${data.responseHours < 24 ? `${Math.max(1, Math.round(data.responseHours))} hours` : `${Math.round(data.responseHours / 24)} days`} — patients see this.`}
+          </p>
           {data.referrals.length === 0 ? (
             <p className="mt-6 rounded-lg border border-dashed border-rule p-6 text-ink-2">
               No referrals yet. You&apos;ll appear when a nearby patient&apos;s records point to {SPECIALTIES[a.specialty]?.label.toLowerCase()}.
@@ -180,6 +188,7 @@ export default function ManagePage() {
             </div>
           </details>
         </section>
+        </div>
 
         <form onSubmit={save} className="grid content-start gap-4 rounded-xl border border-rule bg-surface p-6 lg:sticky lg:top-24">
           <h2 className="text-[20px] font-semibold">Availability</h2>

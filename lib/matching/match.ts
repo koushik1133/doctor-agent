@@ -3,7 +3,7 @@ import { searchProviders, type Provider } from "../sources/nppes";
 import { getAffiliations, getHospitals, getMipsScores, getUtilization, type Hospital } from "../sources/cms";
 import { SPECIALTIES, type SpecialtyId } from "../specialties";
 import { mapLimit } from "../http";
-import { store, platformSuccess, capacityFor, type Capacity, type DoctorApplication } from "../store";
+import { store, platformSuccess, capacityFor, medianResponseHours, type Capacity, type DoctorApplication } from "../store";
 import { score, hospitalOutcomeScore, type ScoreResult } from "./score";
 
 export type MatchedDoctor = {
@@ -18,7 +18,7 @@ export type MatchedDoctor = {
   mipsScore?: number;
   procedures: { category: string; count?: number; percentile?: number }[];
   yearsRegistered?: number;
-  platform?: { verified: boolean; acceptingNew: boolean; telehealth: boolean; languages: string[]; bio?: string; capacity?: Capacity; success?: { rate: number; n: number; avgRating?: number } };
+  platform?: { verified: boolean; acceptingNew: boolean; telehealth: boolean; languages: string[]; bio?: string; capacity?: Capacity; responseHours?: number | null; success?: { rate: number; n: number; avgRating?: number } };
   score: ScoreResult;
 };
 
@@ -134,7 +134,7 @@ export async function matchDoctors(opts: { zip: string; specialty: SpecialtyId; 
       procedures: relevant,
       yearsRegistered: years ? Math.floor(years) : undefined,
       platform: app
-        ? { verified: true, acceptingNew: capacity!.accepting, telehealth: app.telehealth, languages: app.languages, bio: app.bio, capacity, success: success ?? undefined }
+        ? { verified: true, acceptingNew: capacity!.accepting, telehealth: app.telehealth, languages: app.languages, bio: app.bio, capacity, responseHours: medianResponseHours(referrals.filter((r) => r.npi === p.npi)), success: success ?? undefined }
         : success
         ? { verified: false, acceptingNew: false, telehealth: false, languages: [], success }
         : undefined,
@@ -143,13 +143,20 @@ export async function matchDoctors(opts: { zip: string; specialty: SpecialtyId; 
   });
 
   doctors.sort((a, b) => b.score.total - a.score.total);
+  // Doctors who joined the platform are the only ones a patient can book
+  // through us, so they're always returned (in rank order) even when they
+  // fall outside the top `limit` — otherwise the "verified" filter would hide
+  // the very doctors it's for.
+  const top = doctors.slice(0, opts.limit ?? 20);
+  const bookable = doctors.slice(opts.limit ?? 20).filter((d) => d.platform?.verified);
+  const returned = [...top, ...bookable];
   return {
     origin,
     specialty: { id: spec.id, label: spec.label, plain: spec.plain },
     radiusMiles: radius,
     searched: byNpi.size,
     withinRadius,
-    doctors: doctors.slice(0, opts.limit ?? 20),
+    doctors: returned,
     sources: [
       "CMS NPPES NPI Registry",
       "CMS Quality Payment Program — PY2024 MIPS",

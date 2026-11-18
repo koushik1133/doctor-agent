@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { store, findApplicationByToken, publicApplication, capacityFor, platformSuccess } from "@/lib/store";
+import { store, findApplicationByToken, publicApplication, capacityFor, platformSuccess, withRetention, requestStatus, medianResponseHours } from "@/lib/store";
 import { rateLimit } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
@@ -16,8 +16,12 @@ export async function GET(req: NextRequest) {
   if (!rateLimit(req, "manage", 60)) return NextResponse.json({ error: "Too many requests." }, { status: 429 });
   const app = await auth(req);
   if (!app) return NextResponse.json({ error: "This manage link isn't valid. Ask an admin to send a new one." }, { status: 401 });
-  const referrals = (await store().listReferrals([app.npi])).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const referrals = (await withRetention(await store().listReferrals([app.npi]))).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return NextResponse.json({
+    responseHours: medianResponseHours(referrals),
+    requests: referrals
+      .filter((r) => r.request)
+      .map((r) => ({ id: r.id, createdAt: r.createdAt, conditions: r.conditions, patientZip: r.patientZip, status: requestStatus(r.request!), contact: r.request!.contact, respondedAt: r.request!.respondedAt, doctorMessage: r.request!.doctorMessage })),
     application: publicApplication(app),
     capacity: capacityFor(app, referrals),
     success: platformSuccess(referrals),
