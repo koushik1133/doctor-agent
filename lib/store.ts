@@ -39,6 +39,20 @@ export type DoctorApplication = {
 
 export type Outcome = { result: "better" | "same" | "worse"; rating: number; note?: string; at: string };
 
+// A patient asking a verified doctor's office to contact them. Contact details
+// are shared only with explicit consent and erased CONTACT_RETENTION_DAYS after
+// the office responds (or the request expires).
+export type RequestStatus = "pending" | "accepted" | "declined" | "cancelled" | "expired";
+export type PatientContact = { name: string; phone?: string; email?: string; preferredTimes?: string; note?: string };
+export type AppointmentRequest = {
+  status: RequestStatus;
+  contact: PatientContact | null; // null once erased
+  consentAt: string;
+  respondedAt?: string;
+  doctorMessage?: string;
+  contactErasedAt?: string;
+};
+
 export type Referral = {
   id: string;
   npi: string;
@@ -48,6 +62,7 @@ export type Referral = {
   patientZip: string;
   createdAt: string;
   outcome?: Outcome;
+  request?: AppointmentRequest;
 };
 
 type FileShape = { applications: DoctorApplication[]; referrals: Referral[] };
@@ -204,11 +219,60 @@ export const WEEK_MS = 7 * 24 * 3600 * 1000;
 export type Capacity = { used: number; total: number; full: boolean; accepting: boolean; nextOpening?: string };
 
 export function capacityFor(app: Pick<DoctorApplication, "npi" | "weeklyCapacity" | "acceptingNew">, referrals: Referral[], now = Date.now()): Capacity {
+  // Declined, cancelled and expired requests give the spot back.
   const recent = referrals
     .filter((r) => r.npi === app.npi && now - new Date(r.createdAt).getTime() < WEEK_MS)
+    .filter((r) => !r.request || ["pending", "accepted"].includes(requestStatus(r.request, now)))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const used = recent.length;
   const full = used >= app.weeklyCapacity;
   const nextOpening = full && recent.length ? new Date(new Date(recent[used - app.weeklyCapacity]?.createdAt ?? recent[0].createdAt).getTime() + WEEK_MS).toISOString() : undefined;
   return { used, total: app.weeklyCapacity, full, accepting: app.acceptingNew && !full, nextOpening };
+}
+
+// ── Appointment requests ────────────────────────────────────────────────────
+export const REQUEST_TTL_DAYS = 7; // unanswered requests expire
+export const CONTACT_RETENTION_DAYS = 30; // contact details erased after a decision
+const DAY = 24 * 3600 * 1000;
+
+// Status as of `now`: a pending request older than REQUEST_TTL_DAYS is expired.
+export function requestStatus(req: AppointmentRequest, now = Date.now()): RequestStatus {
+  if (req.status === "pending" && now - Date.parse(req.consentAt) > REQUEST_TTL_DAYS * DAY) return "expired";
+  return req.status;
+}
+
+// Returns the referral with contact details erased if they're past retention.
+// `changed` tells the caller to persist the erasure.
+export function applyRetention(r: Referral, now = Date.now()): { referral: Referral; changed: boolean } {
+  const req = r.request;
+  if (!req || !req.contact) return { referral: r, changed: false };
+  const status = requestStatus(req, now);
+  const decidedAt =
+    status === "expired" ? Date.parse(req.consentAt) + REQUEST_TTL_DAYS * DAY : req.respondedAt ? Date.parse(req.respondedAt) : null;
+  if (status === "pending" || decidedAt === null || now - decidedAt < CONTACT_RETENTION_DAYS * DAY) {
+    return { referral: status === req.status ? r : { ...r, request: { ...req, status } }, changed: status !== req.status };
+  }
+  return { referral: { ...r, request: { ...req, status, contact: null, contactErasedAt: new Date(now).toISOString() } }, changed: true };
+}
+
+// Apply retention to a list and persist any erasures.
+export async function withRetention(list: Referral[]): Promise<Referral[]> {
+  const out: Referral[] = [];
+  for (const r of list) {
+    const { referral, changed } = applyRetention(r);
+    if (changed) await store().saveReferral(referral);
+    out.push(referral);
+  }
+  return out;
+}
+
+// Median hours a doctor's office takes to answer requests (null if < 3 answers).
+export function medianResponseHours(referrals: Referral[]): number | null {
+  const hrs = referrals
+    .filter((r) => r.request?.respondedAt)
+    .map((r) => (Date.parse(r.request!.respondedAt!) - Date.parse(r.request!.consentAt)) / 3600000)
+    .sort((a, b) => a - b);
+  if (hrs.length < 3) return null;
+  const m = Math.floor(hrs.length / 2);
+  return hrs.length % 2 ? hrs[m] : (hrs[m - 1] + hrs[m]) / 2;
 }

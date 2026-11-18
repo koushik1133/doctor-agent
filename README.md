@@ -22,6 +22,7 @@ Two products in one app:
 | Doctor portal | `/doctors/manage#<token>` — private link shown once at sign-up (only a SHA-256 hash is stored; admins can reissue). Doctors pause intake, change capacity, see referrals and outcomes. | Platform data |
 | Results | Filter by hospital rating, Medicare quality score, verified, video visits; sort by best match, nearest, outcomes or quality. | — |
 | Visit summary | One-click printable page for the patient to bring: reason for referral, conditions with ICD-10, abnormal labs, procedures, their own notes, suggested questions. Built in the browser; nothing extra stored. | — |
+| Appointment requests | For verified doctors, the patient can ask the office to contact them: name, phone/email, best times, a note, with an explicit consent box. The office accepts or declines from its portal with a message; the patient sees it on their follow-up page and can cancel. Unanswered requests expire after 7 days; declined/expired/cancelled ones free the weekly spot; contact details are erased 30 days after a response. Median reply time is shown to patients once an office has 3+ answers. | Platform data |
 | Doctor onboarding | NPI check digit, registry match on name / status / taxonomy / license / location, CMS footprint → `verified`, `needs_review`, or `rejected`. Reviewers can't approve a failed identity check. | CMS NPPES, CMS provider data |
 
 There is no public per-doctor "success rate" in the US, so the app doesn't invent one — every number in the
@@ -52,11 +53,14 @@ government-data suite nightly so an upstream API change shows up as a failing ch
 
 ```bash
 npm test            # unit tests (analyzer, PDF extraction, NPI/name/license matching, scoring)
+npm run test:e2e    # Playwright, production build: doctor applies → patient uploads, matches and requests →
+                    # doctor accepts in portal → patient sees reply; plus security headers
 npm run test:live   # hits NPPES, CMS and NLM: ICD codes exist, real doctors verify, impostors are rejected,
                     # matching returns enriched results in SF / NYC / Chicago / Houston
 ```
 
-Live testing found and fixed: a corrupt image upload crashing the Node process via an uncaught
+Live testing found and fixed: verified doctors without Medicare data falling outside the returned results (so the
+one bookable doctor was invisible); a corrupt image upload crashing the Node process via an uncaught
 tesseract.js worker error; a retired ICD-10 code (G35 → G35.D), an NPI with a foreign practice address
 passing the location check, and verified doctors being dropped past the enrichment cap.
 

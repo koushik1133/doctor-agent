@@ -50,3 +50,49 @@ describe("manage links", () => {
     expect("manageTokenHash" in publicApplication(app)).toBe(false);
   });
 });
+
+import { requestStatus, applyRetention, medianResponseHours, REQUEST_TTL_DAYS, CONTACT_RETENTION_DAYS, type AppointmentRequest } from "@/lib/store";
+
+describe("appointment requests", () => {
+  const DAY = 24 * 3600 * 1000;
+  const t0 = Date.parse("2026-11-01T00:00:00Z");
+  const req = (over: Partial<AppointmentRequest> = {}): AppointmentRequest => ({
+    status: "pending",
+    consentAt: new Date(t0).toISOString(),
+    contact: { name: "Pat Test", phone: "555 0100" },
+    ...over,
+  });
+  const withReq = (r: AppointmentRequest, daysAgo = 0) => ({ ...ref("1", daysAgo), request: r });
+
+  it("expires unanswered requests after the TTL", () => {
+    expect(requestStatus(req(), t0 + (REQUEST_TTL_DAYS - 1) * DAY)).toBe("pending");
+    expect(requestStatus(req(), t0 + (REQUEST_TTL_DAYS + 1) * DAY)).toBe("expired");
+  });
+
+  it("erases contact details only after the retention window", () => {
+    const answered = req({ status: "accepted", respondedAt: new Date(t0 + DAY).toISOString() });
+    expect(applyRetention(withReq(answered), t0 + 10 * DAY).referral.request!.contact).not.toBeNull();
+    const later = applyRetention(withReq(answered), t0 + (CONTACT_RETENTION_DAYS + 2) * DAY);
+    expect(later.changed).toBe(true);
+    expect(later.referral.request!.contact).toBeNull();
+    expect(later.referral.request!.contactErasedAt).toBeTruthy();
+  });
+
+  it("keeps contact details while a request is still pending", () => {
+    expect(applyRetention(withReq(req()), t0 + 2 * DAY).referral.request!.contact).not.toBeNull();
+  });
+
+  it("gives the weekly spot back when a request is declined", () => {
+    const doc = { npi: "1", weeklyCapacity: 1, acceptingNew: true };
+    const declined = withReq(req({ status: "declined", consentAt: new Date(now - DAY).toISOString(), respondedAt: new Date(now).toISOString() }), 1);
+    const pending = withReq(req({ consentAt: new Date(now - DAY).toISOString() }), 1);
+    expect(capacityFor(doc, [declined], now).accepting).toBe(true);
+    expect(capacityFor(doc, [pending], now).accepting).toBe(false);
+  });
+
+  it("reports a median reply time once there are enough answers", () => {
+    const answered = (h: number) => withReq(req({ status: "accepted", respondedAt: new Date(t0 + h * 3600000).toISOString() }));
+    expect(medianResponseHours([answered(2), answered(5)])).toBeNull();
+    expect(medianResponseHours([answered(2), answered(5), answered(30)])).toBe(5);
+  });
+});
