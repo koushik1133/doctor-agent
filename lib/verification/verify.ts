@@ -108,7 +108,7 @@ export function licenseMatches(claimed: string, official: string): boolean {
   const b = normLicense(official);
   if (!a || !b) return false;
   if (a === b) return true;
-  // State boards often prefix letters (e.g. CA "A123456" / "G15155"). Compare digits.
+  // State boards often prefix letters (e.g. "A123456"). Compare digits.
   const da = a.replace(/^[A-Z]+/, "").replace(/^0+/, "");
   const db = b.replace(/^[A-Z]+/, "").replace(/^0+/, "");
   return da.length >= 4 && da === db;

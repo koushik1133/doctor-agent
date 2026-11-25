@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { isValidNpi, firstNameMatches, lastNameMatches, licenseMatches } from "@/lib/verification/verify";
 
 describe("NPI check digit", () => {
-  it("accepts real NPIs", () => {
-    // Published CMS example + real registry entries
-    for (const n of ["1234567893", "1528157773", "1003809641"]) expect(isValidNpi(n)).toBe(true);
+  it("accepts numbers with a valid check digit", () => {
+    // CMS's published example, plus synthetic numbers: real NPIs start with 1 or 2,
+    // so ones starting with 9 can't belong to anyone.
+    for (const n of ["1234567893", "9000000015", "9123456789"]) expect(isValidNpi(n)).toBe(true);
   });
   it("rejects typos and junk", () => {
-    for (const n of ["1234567890", "1528157774", "123456789", "abcdefghij", ""]) expect(isValidNpi(n)).toBe(false);
+    for (const n of ["1234567890", "9000000016", "123456789", "abcdefghij", ""]) expect(isValidNpi(n)).toBe(false);
   });
 });
 
@@ -22,9 +23,9 @@ describe("name and license matching", () => {
     expect(lastNameMatches("Lee", "LEWIS")).toBe(false);
   });
   it("normalizes license formatting", () => {
-    expect(licenseMatches("g-15155", "G15155")).toBe(true);
-    expect(licenseMatches("15155", "G15155")).toBe(true);
+    expect(licenseMatches("test-12345", "TEST12345")).toBe(true);
+    expect(licenseMatches("12345", "TEST12345")).toBe(true);
     expect(licenseMatches("A0012345", "12345")).toBe(true);
-    expect(licenseMatches("15156", "G15155")).toBe(false);
+    expect(licenseMatches("12346", "TEST12345")).toBe(false);
   });
 });

@@ -41,10 +41,12 @@ live("real-world data", () => {
   });
 
   it("catches an impostor using a real doctor's NPI", async () => {
-    const { provider } = await lookupNpi("1003809641");
+    // Any registered doctor, picked at run time so no identity is committed.
+    const [doc] = await searchProviders({ taxonomyDescription: "Cardiovascular Disease", state: "NY", city: "NEW YORK", pages: 1 });
+    const { provider } = await lookupNpi(doc.npi);
     expect(provider).toBeTruthy();
     const report = await verifyApplication({
-      npi: "1003809641", firstName: "Jane", lastName: "Impostor", specialty: "cardiology",
+      npi: doc.npi, firstName: "Zzjane", lastName: "Zzimpostor", specialty: "cardiology",
       licenseState: "CA", licenseNumber: "A999999", practiceZip: "94110",
     });
     expect(report.decision).toBe("rejected");
