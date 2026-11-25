@@ -1,6 +1,6 @@
 # Analyzer validation — MTSamples
 
-Run: 2026-11-17T17:33:54.666Z · engine: rules (offline) · split: tune · reports evaluated: 1032
+Run: 2026-11-25T14:49:43.218Z · engine: rules (offline) · split: tune · reports evaluated: 1032
 
 | Specialty label | Reports | Top-1 | Top-3 | No finding |
 |---|---:|---:|---:|---:|

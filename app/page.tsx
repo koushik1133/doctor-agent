@@ -1,8 +1,8 @@
 import Link from "next/link";
 
 const RANKING = [
-  { label: "Outcomes", weight: 35, body: "CMS star rating and mortality measures for the hospitals the doctor practices at, blended with how patients we referred say they're doing.", source: "CMS Hospital Compare · patient follow-ups" },
-  { label: "Quality score", weight: 25, body: "The doctor's Merit-based Incentive Payment System score — Medicare's own measure of care quality and cost.", source: "CMS Quality Payment Program, PY2024" },
+  { label: "Outcomes", weight: 35, body: "Average CMS star rating and mortality measures for the hospitals the doctor is affiliated with. This describes the hospitals, not the doctor. Reports from patients whose request the office accepted are blended in.", source: "CMS Hospital Compare · patient follow-ups" },
+  { label: "Quality score", weight: 25, body: "Medicare's MIPS score. Often this is the score of the doctor's whole group, and the detail view says so.", source: "CMS Quality Payment Program, PY2024" },
   { label: "Experience", weight: 15, body: "How many of the relevant procedures they perform compared with doctors nationally.", source: "CMS Doctors & Clinicians utilization" },
   { label: "Distance", weight: 15, body: "Closer is better, within the radius you choose.", source: "ZIP code centroids" },
   { label: "Specialty fit", weight: 10, body: "Whether this is their primary specialty, and if they've verified with us and are taking new patients.", source: "NPPES taxonomy · onboarding" },
@@ -97,7 +97,7 @@ export default function Home() {
         <div>
           <h2 className="text-[clamp(1.6rem,3vw,2.25rem)] font-semibold">Doctors with room for new patients</h2>
           <p className="mt-3 max-w-[52ch] text-ink-2">
-            Apply with your NPI. We check it against the federal registry — name, license, specialty, active status — in seconds. Pass, and
+            Apply with your NPI. We check it against the federal registry — name, license, specialty, active status, then call your listed office to confirm it's you. After that,
             patients whose records match your specialty start seeing you, up to the weekly number you set.
           </p>
           <Link href="/doctors/join" className="mt-6 inline-block font-bold text-pine underline underline-offset-4">

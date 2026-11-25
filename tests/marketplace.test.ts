@@ -11,6 +11,7 @@ const ref = (npi: string, daysAgo: number): Referral => ({
   conditions: [],
   patientZip: "94110",
   createdAt: new Date(now - daysAgo * 24 * 3600 * 1000).toISOString(),
+  request: { status: "accepted", contact: null, consentAt: new Date(now - daysAgo * 24 * 3600 * 1000).toISOString() },
 });
 
 describe("weekly capacity", () => {
@@ -94,5 +95,27 @@ describe("appointment requests", () => {
     const answered = (h: number) => withReq(req({ status: "accepted", respondedAt: new Date(t0 + h * 3600000).toISOString() }));
     expect(medianResponseHours([answered(2), answered(5)])).toBeNull();
     expect(medianResponseHours([answered(2), answered(5), answered(30)])).toBe(5);
+  });
+});
+
+import { isActiveDoctor, purgeExpiredContacts } from "@/lib/store";
+
+describe("access to patient data", () => {
+  it("is refused until a reviewer has confirmed identity", () => {
+    const a = { status: "verified" } as DoctorApplication; // e.g. auto-verified by an older version
+    expect(isActiveDoctor(a)).toBe(false);
+    expect(isActiveDoctor({ ...a, identityConfirmed: { at: "", method: "called office" } })).toBe(true);
+    expect(isActiveDoctor({ ...a, status: "rejected", identityConfirmed: { at: "", method: "x" } })).toBe(false);
+  });
+  it("saved referrals without a request don't use up capacity", () => {
+    expect(capacityFor({ npi: "1", weeklyCapacity: 1, acceptingNew: true }, [{ ...ref("1", 1), request: undefined }], now).full).toBe(false);
+  });
+  it("purges expired contact details nobody opens, and cancelling isn't an office reply", async () => {
+    const old = { status: "accepted" as const, contact: { name: "P", phone: "1" }, consentAt: "2020-01-01T00:00:00Z", respondedAt: "2020-01-02T00:00:00Z" };
+    await store().saveReferral({ ...ref("9", 1), id: "purge", request: old });
+    await purgeExpiredContacts();
+    expect((await store().getReferral("purge"))!.request!.contact).toBeNull();
+    const c = { ...ref("1", 1), request: { ...old, status: "cancelled" as const } };
+    expect(medianResponseHours([c, c, c])).toBeNull();
   });
 });

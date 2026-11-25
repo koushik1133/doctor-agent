@@ -39,7 +39,12 @@ export default function AdminPage() {
   }, [load]);
 
   async function act(id: string, action: "approve" | "reject" | "reverify" | "reissue_link") {
-    const res = await fetch("/api/admin/applications", { method: "PATCH", headers: { ...headers(), "content-type": "application/json" }, body: JSON.stringify({ id, action }) });
+    let identityMethod: string | undefined;
+    if (action === "approve") {
+      identityMethod = prompt("How did you confirm this person is the doctor? Call the office number in the NPPES record, not a number or email from the application.")?.trim();
+      if (!identityMethod) return;
+    }
+    const res = await fetch("/api/admin/applications", { method: "PATCH", headers: { ...headers(), "content-type": "application/json" }, body: JSON.stringify({ id, action, identityMethod }) });
     const data = await res.json();
     if (!res.ok) return setError(data.error);
     setApps((list) => list?.map((a) => (a.id === id ? data.application : a)) ?? null);
@@ -50,7 +55,7 @@ export default function AdminPage() {
   return (
     <main className="mx-auto max-w-5xl px-4 pb-24 pt-12 sm:px-6">
       <h1 className="text-[clamp(2rem,4vw,2.75rem)] font-semibold">Doctor applications</h1>
-      <p className="mt-2 max-w-[62ch] text-ink-2">Every application is auto-checked against NPPES. Approve only what you&apos;ve confirmed — applications that fail an identity check can&apos;t be approved.</p>
+      <p className="mt-2 max-w-[62ch] text-ink-2">Checks compare the application with NPPES, which is public, so passing them doesn&apos;t prove who applied. Call the office number listed in NPPES before approving.</p>
 
       {error && (
         <div role="alert" className="mt-6 rounded-lg border border-alert/40 bg-alert-wash p-4 text-[15px]">
@@ -86,7 +91,7 @@ export default function AdminPage() {
               <button type="button" onClick={() => setOpen(isOpen ? null : a.id)} aria-expanded={isOpen} className="flex w-full flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-4 text-left">
                 <span className="font-display text-[19px] font-semibold">{a.firstName} {a.lastName}</span>
                 <span className="text-[14px] text-ink-2">{SPECIALTIES[a.specialty]?.label} · NPI {a.npi} · {a.licenseState} {a.practiceZip}</span>
-                <span className="ml-auto text-[13px] text-ink-3">{fails.length ? `${fails.length} item${fails.length > 1 ? "s" : ""} to check` : "all checks passed"} · {new Date(a.createdAt).toLocaleDateString()}</span>
+                <span className="ml-auto text-[13px] text-ink-3">{fails.length ? `${fails.length} item${fails.length > 1 ? "s" : ""} to check` : "registry details match"} · {new Date(a.createdAt).toLocaleDateString()}</span>
               </button>
               {isOpen && (
                 <div className="grid gap-6 border-t border-rule px-5 py-5 md:grid-cols-[1fr_15rem]">
@@ -99,11 +104,11 @@ export default function AdminPage() {
                       {a.status !== "verified" && <button onClick={() => act(a.id, "approve")} className="rounded-lg bg-pine px-3 py-2 font-bold text-pine-ink">Approve</button>}
                       {a.status !== "rejected" && <button onClick={() => act(a.id, "reject")} className="rounded-lg border border-alert px-3 py-2 font-bold text-alert">Reject</button>}
                       <button onClick={() => act(a.id, "reverify")} className="rounded-lg border border-rule px-3 py-2">Re-run checks</button>
-                      {a.status !== "rejected" && <button onClick={() => act(a.id, "reissue_link")} className="rounded-lg border border-rule px-3 py-2">New practice link</button>}
+                      {a.status === "verified" && <button onClick={() => act(a.id, "reissue_link")} className="rounded-lg border border-rule px-3 py-2">New practice link</button>}
                     </div>
                     {issued?.id === a.id && (
                       <div className="mt-2 rounded-lg bg-pine-wash p-3">
-                        <p className="font-bold">Send this to {a.email}</p>
+                        <p className="font-bold">Give this to the doctor through the contact you confirmed</p>
                         <input readOnly value={issued.url} onFocus={(e) => e.currentTarget.select()} aria-label="New practice link" className="mt-2 w-full rounded border border-rule bg-surface px-2 py-1 text-[13px]" />
                         <p className="mt-1 text-[12px] text-ink-3">The previous link no longer works. This one isn&apos;t shown again.</p>
                       </div>

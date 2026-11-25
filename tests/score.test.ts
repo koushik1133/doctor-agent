@@ -39,9 +39,10 @@ describe("ranking score", () => {
 });
 
 describe("platform success rate", () => {
-  const ref = (result: "better" | "same" | "worse"): Referral => ({ id: "x", npi: "1", doctorName: "", specialty: "cardiology", conditions: [], patientZip: "94110", createdAt: "", outcome: { result, rating: 5, at: "" } });
+  const ref = (result: "better" | "same" | "worse"): Referral => ({ id: "x", npi: "1", doctorName: "", specialty: "cardiology", conditions: [], patientZip: "94110", createdAt: "", outcome: { result, rating: 5, at: "" }, request: { status: "accepted", contact: null, consentAt: "" } });
   it("shrinks small samples toward 50%", () => {
     expect(platformSuccess([ref("better")])!.rate).toBeCloseTo(0.6);
     expect(platformSuccess([])).toBeNull();
+    expect(platformSuccess([{ ...ref("better"), request: undefined }])).toBeNull(); // anonymous reports don't count
   });
 });

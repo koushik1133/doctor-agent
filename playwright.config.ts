@@ -26,6 +26,6 @@ export default defineConfig({
     url: `http://localhost:${PORT}`,
     reuseExistingServer: false,
     timeout: 120_000,
-    env: { DATA_FILE, NODE_ENV: "production" },
+    env: { DATA_FILE, NODE_ENV: "production", ADMIN_TOKEN: "e2e-admin" },
   },
 });

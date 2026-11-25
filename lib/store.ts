@@ -31,9 +31,10 @@ export type DoctorApplication = {
   createdAt: string;
   reviewedAt?: string;
   reviewNote?: string;
-  // sha256 of the doctor's private manage-link token. The token itself is only
-  // ever shown once, at application time.
+  // sha256 of the doctor's private manage-link token. Issued only on approval.
   manageTokenHash?: string;
+  // Set when a reviewer confirmed, out of band, that the applicant is this doctor.
+  identityConfirmed?: { at: string; method: string };
   updatedAt?: string;
 };
 
@@ -178,7 +179,8 @@ export const newId = () => randomUUID();
 // Platform-observed success rate: share of referrals whose patient reported
 // feeling better, with a Beta(2,2) prior so 1-for-1 doesn't read as 100%.
 export function platformSuccess(referrals: Referral[]): { rate: number; n: number; avgRating?: number } | null {
-  const done = referrals.filter((r) => r.outcome);
+  // Only visits a confirmed office accepted count; anyone can save a referral.
+  const done = referrals.filter((r) => r.outcome && r.request?.status === "accepted");
   if (!done.length) return null;
   const wins = done.filter((r) => r.outcome!.result === "better").length;
   const rate = (wins + 2) / (done.length + 4);
@@ -211,6 +213,11 @@ export function publicApplication(a: DoctorApplication): Omit<DoctorApplication,
   return rest;
 }
 
+// Only approved doctors whose identity a reviewer confirmed may receive patient
+// data. Records auto-verified by earlier versions have no confirmation and fail.
+export const isActiveDoctor = (a: DoctorApplication | null | undefined): a is DoctorApplication =>
+  !!a && a.status === "verified" && !!a.identityConfirmed;
+
 // ── Capacity ────────────────────────────────────────────────────────────────
 // A doctor's weekly capacity is the number of referrals they'll take in any
 // rolling 7-day window.
@@ -222,7 +229,7 @@ export function capacityFor(app: Pick<DoctorApplication, "npi" | "weeklyCapacity
   // Declined, cancelled and expired requests give the spot back.
   const recent = referrals
     .filter((r) => r.npi === app.npi && now - new Date(r.createdAt).getTime() < WEEK_MS)
-    .filter((r) => !r.request || ["pending", "accepted"].includes(requestStatus(r.request, now)))
+    .filter((r) => r.request && ["pending", "accepted"].includes(requestStatus(r.request, now)))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const used = recent.length;
   const full = used >= app.weeklyCapacity;
@@ -269,10 +276,16 @@ export async function withRetention(list: Referral[]): Promise<Referral[]> {
 // Median hours a doctor's office takes to answer requests (null if < 3 answers).
 export function medianResponseHours(referrals: Referral[]): number | null {
   const hrs = referrals
-    .filter((r) => r.request?.respondedAt)
+    .filter((r) => r.request?.respondedAt && ["accepted", "declined"].includes(r.request.status))
     .map((r) => (Date.parse(r.request!.respondedAt!) - Date.parse(r.request!.consentAt)) / 3600000)
     .sort((a, b) => a - b);
   if (hrs.length < 3) return null;
   const m = Math.floor(hrs.length / 2);
   return hrs.length % 2 ? hrs[m] : (hrs[m - 1] + hrs[m]) / 2;
+}
+
+// Erase expired contact details everywhere, not only for records someone opens.
+// Runs hourly from instrumentation.ts; on serverless hosts call it from a cron.
+export async function purgeExpiredContacts(): Promise<void> {
+  await withRetention(await store().listReferrals());
 }

@@ -14,7 +14,7 @@ function ext(name: string) {
 
 // Turn an uploaded medical document into plain text. PDFs/DOCX/TXT are parsed
 // locally. Photos and scanned PDFs are OCR'd locally with Tesseract, or with a
-// Groq vision model when GROQ_API_KEY is set (better on handwriting).
+// Groq vision model only when OCR_ENGINE=groq (the photo is then sent to Groq).
 export async function extractDocumentText(file: File): Promise<{ text: string; method: string }> {
   if (file.size > MAX_FILE_BYTES) throw new ExtractError(`${file.name} is larger than 10 MB.`);
   const e = ext(file.name);
@@ -38,7 +38,7 @@ export async function extractDocumentText(file: File): Promise<{ text: string; m
     return { text: new TextDecoder().decode(buf), method: "text" };
   }
   if ([".png", ".jpg", ".jpeg", ".webp"].includes(e) || file.type.startsWith("image/")) {
-    return { text: await ocrImage(buf, file.type || "image/png", file.name), method: process.env.GROQ_API_KEY && process.env.OCR_ENGINE !== "local" ? "vision-ocr" : "ocr" };
+    return { text: await ocrImage(buf, file.type || "image/png", file.name), method: process.env.GROQ_API_KEY && process.env.OCR_ENGINE === "groq" ? "vision-ocr" : "ocr" };
   }
   throw new ExtractError(`${file.name}: unsupported file type. Use PDF, DOCX, TXT, or an image.`);
 }
@@ -48,7 +48,7 @@ async function ocrImage(buf: Uint8Array, mime: string, name: string): Promise<st
     throw new ExtractError(`${name}: this isn't a readable image. Upload a PNG, JPEG or WebP photo of the page.`);
   }
   const key = process.env.GROQ_API_KEY;
-  if (!key || process.env.OCR_ENGINE === "local") {
+  if (!key || process.env.OCR_ENGINE !== "groq") {
     // Local Tesseract: no key, nothing leaves the server.
     try {
       const { text } = await ocrBuffer(buf);

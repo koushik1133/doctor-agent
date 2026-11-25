@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { store, findApplicationByToken, requestStatus } from "@/lib/store";
+import { store, findApplicationByToken, isActiveDoctor, requestStatus } from "@/lib/store";
 import { rateLimit } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ const Body = z.object({
 export async function POST(req: NextRequest) {
   if (!rateLimit(req, "manage", 60)) return NextResponse.json({ error: "Too many requests." }, { status: 429 });
   const app = await findApplicationByToken(req.headers.get("x-manage-token") ?? "");
-  if (!app) return NextResponse.json({ error: "This manage link isn't valid." }, { status: 401 });
+  if (!isActiveDoctor(app)) return NextResponse.json({ error: "This manage link isn't valid." }, { status: 401 });
   const parsed = Body.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 

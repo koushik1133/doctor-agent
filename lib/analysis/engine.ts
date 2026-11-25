@@ -309,10 +309,13 @@ function diagnosisLines(text: string): string[] {
   return [...new Set(out)].slice(0, 8);
 }
 
-// Full analysis: rules + live ICD-10 validation + NLM lookups for diagnosis
-// lines. Network failures degrade gracefully (codes just stay unverified).
+// Rules only by default: nothing derived from the document leaves the server.
+// ALLOW_EXTERNAL_DX_LOOKUP=1 additionally sends diagnosis phrases and codes to
+// NLM. Those phrases come from the patient's document and can identify them, so
+// enable it only with a legal basis to do so.
 export async function analyze(rawText: string): Promise<Analysis> {
   const base = runRules(rawText);
+  if (process.env.ALLOW_EXTERNAL_DX_LOOKUP !== "1") return { ...base, engine: "rules" };
   const known = new Set(base.conditions.map((c) => c.name.toLowerCase()));
 
   const extra: Finding[] = [];

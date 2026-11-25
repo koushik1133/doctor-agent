@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { store, withRetention, requestStatus } from "@/lib/store";
+import { store, withRetention, requestStatus, isActiveDoctor } from "@/lib/store";
 
 export const runtime = "nodejs";
 
@@ -12,7 +12,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   const app = await store().getApplicationByNpi(r.npi);
   return NextResponse.json({
     ...r,
-    office: app?.status === "verified" ? { phone: app.phone, telehealth: app.telehealth } : null,
+    office: isActiveDoctor(app) ? { phone: app.phone, telehealth: app.telehealth } : null,
   });
 }
 

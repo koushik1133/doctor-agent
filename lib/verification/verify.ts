@@ -15,7 +15,10 @@ export type CheckResult = {
 };
 
 export type VerificationReport = {
-  decision: "verified" | "needs_review" | "rejected";
+  // NPPES data (including licenses) is public, so matching it never proves who
+  // is applying. The automatic result is at most needs_review.
+  decision: "needs_review" | "rejected";
+  registryMatch: boolean; // every automatic check that matters passed
   checks: CheckResult[];
   provider?: Pick<Provider, "npi" | "firstName" | "lastName" | "credential" | "address" | "taxonomies" | "enumerationDate" | "lastUpdated">;
   checkedAt: string;
@@ -246,9 +249,11 @@ function finish(checks: CheckResult[], provider?: Provider): VerificationReport 
   const criticalFail = checks.some((c) => c.critical && c.status === "fail");
   const anyFail = checks.some((c) => c.status === "fail");
   const mustPass = ["name", "license"].every((id) => checks.find((c) => c.id === id)?.status === "pass");
-  const decision = criticalFail ? "rejected" : !anyFail && mustPass && checks.find((c) => c.id === "specialty")?.status === "pass" ? "verified" : "needs_review";
+  const registryMatch = !criticalFail && !anyFail && mustPass && checks.find((c) => c.id === "specialty")?.status === "pass";
+  const decision = criticalFail ? "rejected" : "needs_review";
   return {
     decision,
+    registryMatch,
     checks,
     provider: provider && {
       npi: provider.npi,

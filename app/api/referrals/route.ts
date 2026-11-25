@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { SPECIALTIES, type SpecialtyId } from "@/lib/specialties";
-import { store, newId, capacityFor, type Referral } from "@/lib/store";
+import { store, newId, capacityFor, isActiveDoctor, type Referral } from "@/lib/store";
 import { rateLimit } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
@@ -36,10 +36,10 @@ export async function POST(req: NextRequest) {
   const { request, ...base } = parsed.data;
   // Doctors who joined the platform control their own intake.
   const app = await store().getApplicationByNpi(base.npi);
-  if (request && app?.status !== "verified") {
+  if (request && !isActiveDoctor(app)) {
     return NextResponse.json({ error: "This doctor hasn't joined Referral Desk, so requests can't be sent. Call the office instead." }, { status: 422 });
   }
-  if (app?.status === "verified") {
+  if (request && isActiveDoctor(app)) {
     const cap = capacityFor(app, await store().listReferrals([app.npi]));
     if (!cap.accepting) {
       return NextResponse.json(

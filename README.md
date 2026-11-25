@@ -13,49 +13,50 @@ Two products in one app:
 
 | Step | What happens | Real-world data source |
 |---|---|---|
-| Upload | PDF / DOCX / TXT parsed in memory. Photos and scanned PDFs are OCR'd locally with Tesseract (no key, nothing leaves the server; Groq vision is used instead if `GROQ_API_KEY` is set). Nothing is stored. | — |
-| Analyse | Section-aware clinical rules: ~100 conditions, 16 procedure/test families (weighted below diagnoses), 11 lab analytes with thresholds, negation ("denies chest pain"), family vs. past history, red flags. Diagnosis lines outside the lexicon are looked up live. | NLM ICD-10-CM (every code validated live) |
+| Upload | PDF / DOCX / TXT parsed in memory. Photos and scanned PDFs are OCR'd locally with Tesseract (`OCR_ENGINE=groq` sends photos to Groq instead). Files are not stored. | — |
+| Analyse | Section-aware clinical rules: ~100 conditions, 16 procedure/test families (weighted below diagnoses), 11 lab analytes with thresholds, negation ("denies chest pain"), family vs. past history, red flags. `ALLOW_EXTERNAL_DX_LOOKUP=1` also sends diagnosis phrases from the document to NLM; off by default. | NLM ICD-10-CM (codes checked in live tests) |
 | Match | Doctors with the right NUCC taxonomy in the patient's ZIP area, filtered by distance. | CMS NPPES NPI Registry, Zippopotam.us |
 | Rank | Outcomes 35% · Quality 25% · Experience 15% · Distance 15% · Fit 10%. Missing data lowers the score. | CMS Hospital General Info (star rating, mortality), PY2024 MIPS, Doctors & Clinicians utilization + facility affiliation |
 | Success rate | Patients report how they're doing after the visit (`/referral/[id]`); this blends into the outcomes score with a Beta(2,2) prior so it only moves as evidence accumulates. | Platform data |
 | Doctor capacity | Each verified doctor sets new patients per week; referrals are counted over a rolling 7 days and refused (409) when full or paused. Patients see "Full this week" / spots left. | Platform data |
-| Doctor portal | `/doctors/manage#<token>` — private link shown once at sign-up (only a SHA-256 hash is stored; admins can reissue). Doctors pause intake, change capacity, see referrals and outcomes. | Platform data |
+| Doctor portal | `/doctors/manage#<token>` — private link issued on approval (only a SHA-256 hash is stored; admins can reissue). Doctors pause intake, change capacity, see referrals and outcomes. | Platform data |
 | Results | Filter by hospital rating, Medicare quality score, verified, video visits; sort by best match, nearest, outcomes or quality. | — |
 | Visit summary | One-click printable page for the patient to bring: reason for referral, conditions with ICD-10, abnormal labs, procedures, their own notes, suggested questions. Built in the browser; nothing extra stored. | — |
-| Appointment requests | For verified doctors, the patient can ask the office to contact them: name, phone/email, best times, a note, with an explicit consent box. The office accepts or declines from its portal with a message; the patient sees it on their follow-up page and can cancel. Unanswered requests expire after 7 days; declined/expired/cancelled ones free the weekly spot; contact details are erased 30 days after a response. Median reply time is shown to patients once an office has 3+ answers. | Platform data |
-| Doctor onboarding | NPI check digit, registry match on name / status / taxonomy / license / location, CMS footprint → `verified`, `needs_review`, or `rejected`. Reviewers can't approve a failed identity check. | CMS NPPES, CMS provider data |
+| Appointment requests | For verified doctors, the patient can ask the office to contact them: name, phone/email, best times, a note, with an explicit consent box. The office accepts or declines from its portal with a message; the patient sees it on their follow-up page and can cancel. Unanswered requests expire after 7 days; declined/expired/cancelled ones free the weekly spot; contact details are erased 30 days after a response by an hourly in-process job (use a cron on serverless hosts). Median reply time is shown to patients once an office has 3+ answers. | Platform data |
+| Doctor onboarding | Registry checks (NPI, name, status, taxonomy, license, location) end in `needs_review` or `rejected`, never approval: all of that data is public and cannot prove who applied. A reviewer calls the office number in NPPES and records how identity was confirmed; only then is the practice link issued. | CMS NPPES, CMS provider data |
 
 There is no public per-doctor "success rate" in the US, so the app doesn't invent one — every number in the
 ranking comes from a named dataset and the UI shows which.
 
-### Validation on real data
+### Analyzer evaluation (development scores, not held-out)
 
-`npm run validate:analyzer -- /path/to/mtsamples.csv` scores the analyzer on
-[MTSamples](https://raw.githubusercontent.com/socd06/medical-nlp/master/data/mtsamples.csv) — ~5,000 real de-identified
-transcribed reports labelled by specialty. The lexicon was tuned on even rows only; odd rows are the held-out set.
+`npm run validate:analyzer -- /path/to/mtsamples.csv --split=dedup`
 
-| Held-out (1,025 reports, 17 specialties) | Top-1 | Top-3 |
-|---|---:|---:|
-| Initial rules | 39.3% | 45.7% |
-| + negation, sections, broader lexicon | 56.5% | 67.2% |
-| + procedure/test signals | 64.0% | 75.7% |
-| + foot/ankle, tendon, stroke, spinal cord, gait | **65.6%** | **78.1%** (85.3% when any finding exists) |
+[MTSamples](https://raw.githubusercontent.com/socd06/medical-nlp/master/data/mtsamples.csv) has 4,999 sample transcribed
+reports; 2,057 carry one of the 17 specialty labels we can map. Some labels accept two specialties (e.g. Urology also
+accepts nephrology).
 
-Weakest: nephrology (54.8% top-3) — MTSamples files much urologic surgery (stones, bladder tumours) under
-"Nephrology"; the mapping is left strict rather than tuned to the dataset.
+| Set | Reports | Top-1 | Top-3 |
+|---|---:|---:|---:|
+| Even rows (tuned on) | 1,032 | 65.1% | 79.1% |
+| Odd rows | 1,025 | 65.6% | 78.1% |
+| Odd rows, minus texts repeated in even rows | 455 | 68.4% | 81.5% |
 
-Full per-specialty tables: `validation/analyzer-report-holdout.md`.
+Odd-row results and some odd-row misses were seen between lexicon changes and guided which specialties to work on, so
+none of these estimate accuracy on new documents. 109 odd-row reports share their text with a tuned-on report. Earlier
+README versions called the odd rows "held-out" and compared them with a 39.3% / 45.7% baseline that had been measured on
+all 2,057 reports. That comparison was not valid. A real estimate needs a new labelled dataset nobody has looked at.
 
 ### Tests
 
 CI (`.github/workflows/ci.yml`) runs typecheck, unit tests and build on every push and PR, and the live
-government-data suite nightly so an upstream API change shows up as a failing check.
+and browser suites nightly. GitHub runs schedules only from the default branch, so nightly runs start once this is on `main`.
 
 ```bash
 npm test            # unit tests (analyzer, PDF extraction, NPI/name/license matching, scoring)
 npm run test:e2e    # Playwright, production build: doctor applies → patient uploads, matches and requests →
                     # doctor accepts in portal → patient sees reply; plus security headers
-npm run test:live   # hits NPPES, CMS and NLM: ICD codes exist, real doctors verify, impostors are rejected,
+npm run test:live   # hits NPPES, CMS and NLM: ICD codes exist, registry mismatches are rejected, matches go to review,
                     # matching returns enriched results in SF / NYC / Chicago / Houston
 ```
 
@@ -151,3 +152,11 @@ This software does not replace medical advice. It is not a medical device. It mu
 not be used to make clinical decisions for real patients without appropriate
 regulatory clearance, BAAs with all infrastructure providers, and physician
 oversight.
+
+## Known gaps
+
+- A determined impostor is stopped only by the reviewer's phone call.
+- Patients aren't authenticated, so one person can send several requests; outcomes can be gamed by an approved doctor.
+- `/doctor`, `/api/ingest`, `/api/chat` (original triage app) have no login. Don't connect real patient data.
+- "Outcomes" describes affiliated hospitals; many MIPS scores belong to a group. Neither is a personal success rate.
+- Requests hold names, contacts and conditions unencrypted in the store. Not HIPAA-ready.

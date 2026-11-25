@@ -29,7 +29,7 @@ export default function ReferralPage({ params }: { params: Promise<{ id: string 
   }, [id]);
 
   async function cancelRequest() {
-    if (!confirm("Cancel this request? Your contact details will be deleted from the office's list.")) return;
+    if (!confirm("Cancel this request? Your contact details will be deleted.")) return;
     setCancelling(true);
     const res = await fetch(`/api/referrals/${id}`, { method: "DELETE" });
     setCancelling(false);
@@ -146,8 +146,8 @@ function RequestStatusCard({
         {status === "pending" &&
           `Sent ${new Date(request.consentAt).toLocaleDateString()}. The office will contact you${request.contact?.phone ? ` at ${request.contact.phone}` : request.contact?.email ? ` at ${request.contact.email}` : ""}. Requests expire after 7 days without a reply.`}
         {status === "accepted" && "Expect a call or email to set a time. If you don't hear back in a couple of days, call the office."}
-        {status === "declined" && "Your contact details will be deleted. Try another doctor from your results."}
-        {status === "expired" && "Your contact details will be deleted. Call the office, or choose another doctor."}
+        {status === "declined" && "Your contact details will be deleted within 30 days. Try another doctor from your results."}
+        {status === "expired" && "Your contact details will be deleted within 30 days. Call the office, or choose another doctor."}
         {status === "cancelled" && "Your contact details have been deleted."}
         {officePhone && status !== "cancelled" && (
           <>

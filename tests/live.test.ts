@@ -37,7 +37,7 @@ live("real-world data", () => {
     expect(report.checks.find((c) => c.id === "name")!.status).toBe("pass");
     expect(report.checks.find((c) => c.id === "license")!.status).toBe("pass");
     expect(report.checks.find((c) => c.id === "specialty")!.status).toBe("pass");
-    expect(report.decision).not.toBe("rejected");
+    expect(report.decision).toBe("needs_review"); // public data never proves identity
   });
 
   it("catches an impostor using a real doctor's NPI", async () => {
@@ -78,7 +78,10 @@ live("real-world data", () => {
     expect(SPECIALTIES[specialty].taxonomyCodes.length).toBeGreaterThan(0);
   });
 
-  it("validates analyzer ICD codes live and resolves diagnosis lines outside the lexicon", async () => {
+  it("resolves diagnosis lines outside the lexicon only when external lookup is enabled", async () => {
+    const off = await analyze("Assessment: Sarcoidosis of lung. Type 2 diabetes mellitus.");
+    expect(off.conditions.some((c) => c.source === "diagnosis-line")).toBe(false);
+    process.env.ALLOW_EXTERNAL_DX_LOOKUP = "1";
     const a = await analyze("Assessment: Sarcoidosis of lung. Type 2 diabetes mellitus.");
     const t2 = a.conditions.find((c) => c.id === "t2dm")!;
     expect(t2.icd10Verified).toBe(true);

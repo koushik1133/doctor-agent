@@ -8,6 +8,7 @@ export type ScoreInput = {
   distanceMiles: number;
   radiusMiles: number;
   mipsScore?: number; // 0–100, CMS MIPS final score
+  mipsSource?: string; // "individual", "group", ... as reported by CMS
   procedurePercentile?: number; // 0–100, CMS utilization percentile for relevant procedures
   procedureCount?: number;
   yearsRegistered?: number;
@@ -43,7 +44,7 @@ export function score(i: ScoreInput): ScoreResult {
   const hospital = i.hospital ? hospitalOutcomeScore(i.hospital) : null;
   let outcomes: number | null = hospital;
   let outcomeDetail = hospital !== null
-    ? `Affiliated hospital: ${i.hospital!.rating ? `${i.hospital!.rating}★ CMS rating` : "unrated"}, ${i.hospital!.better} outcome measures better / ${i.hospital!.worse} worse than national`
+    ? `Affiliated hospitals (not this doctor individually): ${i.hospital!.rating ? `${i.hospital!.rating.toFixed(1)}★ average CMS rating` : "unrated"}, ${i.hospital!.better} mortality measures better / ${i.hospital!.worse} worse than national`
     : "No CMS hospital outcome data";
   if (i.platform && i.platform.n > 0) {
     const w = i.platform.n / (i.platform.n + 5); // trust platform data as it accumulates
@@ -68,7 +69,7 @@ export function score(i: ScoreInput): ScoreResult {
 
   const components: Component[] = [
     { key: "outcomes", label: "Outcomes", weight: 0.35, value: outcomes, detail: outcomeDetail, source: "CMS Hospital Compare + patient follow-ups" },
-    { key: "quality", label: "Quality score", weight: 0.25, value: quality, detail: quality !== null ? `MIPS ${i.mipsScore!.toFixed(1)} / 100` : "Not in CMS MIPS reporting", source: "CMS Quality Payment Program (PY2024)" },
+    { key: "quality", label: "Quality score", weight: 0.25, value: quality, detail: quality !== null ? `MIPS ${i.mipsScore!.toFixed(1)} / 100${i.mipsSource === "individual" ? "" : ` (${i.mipsSource || "not individual"} score, shared with colleagues)`}` : "Not in CMS MIPS reporting", source: "CMS Quality Payment Program (PY2024)" },
     { key: "experience", label: "Experience", weight: 0.15, value: experience, detail: expDetail, source: "CMS Doctors & Clinicians utilization / NPPES" },
     { key: "proximity", label: "Distance", weight: 0.15, value: proximity, detail: i.distanceMiles < 1 ? "Same ZIP code area" : `${i.distanceMiles.toFixed(1)} mi away`, source: "ZIP centroid distance" },
     { key: "fit", label: "Specialty fit", weight: 0.1, value: fit, detail: [i.primaryMatch ? "Primary specialty matches" : "Secondary specialty matches", i.verifiedOnPlatform ? "verified on platform" : null, i.acceptingNew ? "accepting new patients" : null].filter(Boolean).join(", "), source: "NPPES taxonomy + onboarding" },

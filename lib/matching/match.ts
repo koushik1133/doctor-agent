@@ -3,8 +3,8 @@ import { searchProviders, type Provider } from "../sources/nppes";
 import { getAffiliations, getHospitals, getMipsScores, getUtilization, type Hospital } from "../sources/cms";
 import { SPECIALTIES, type SpecialtyId } from "../specialties";
 import { mapLimit } from "../http";
-import { store, platformSuccess, capacityFor, medianResponseHours, type Capacity, type DoctorApplication } from "../store";
-import { score, hospitalOutcomeScore, type ScoreResult } from "./score";
+import { store, platformSuccess, capacityFor, medianResponseHours, isActiveDoctor, type Capacity, type DoctorApplication } from "../store";
+import { score, type ScoreResult } from "./score";
 
 export type MatchedDoctor = {
   npi: string;
@@ -59,7 +59,7 @@ export async function matchDoctors(opts: { zip: string; specialty: SpecialtyId; 
   }
 
   // 2. Verified doctors who applied through the platform.
-  const apps = (await store().listApplications()).filter((a) => a.status === "verified" && a.specialty === spec.id);
+  const apps = (await store().listApplications()).filter((a) => isActiveDoctor(a) && a.specialty === spec.id);
   const appByNpi = new Map<string, DoctorApplication>(apps.map((a) => [a.npi, a]));
   for (const a of apps) {
     if (byNpi.has(a.npi) || !a.verification.provider) continue;
@@ -102,8 +102,14 @@ export async function matchDoctors(opts: { zip: string; specialty: SpecialtyId; 
     const bestProc = relevant.sort((a, b) => (b.percentile ?? 0) - (a.percentile ?? 0))[0];
     const hospList = ((aff.get(p.npi) ?? []) as string[]).map((c) => hospitals.get(c))
       .filter((h): h is Hospital => !!h && h.state === p.address.state); // only hospitals the patient could realistically use
-    const hospScore = (h: Hospital) => hospitalOutcomeScore({ rating: h.rating, ...h.mortality }) ?? 0;
-    const bestHosp = hospList.sort((a, b) => hospScore(b) - hospScore(a))[0];
+    // Average every in-state affiliation. Picking the best one flattered doctors
+    // who are loosely attached to a top hospital.
+    const rated = hospList.filter((h) => h.rating);
+    const sum = (k: "better" | "worse" | "total") => hospList.reduce((n, h) => n + h.mortality[k], 0);
+    const hospAvg = hospList.length
+      ? { rating: rated.length ? rated.reduce((n, h) => n + h.rating!, 0) / rated.length : undefined, better: sum("better"), worse: sum("worse"), total: sum("total") }
+      : undefined;
+    const bestHosp = hospList[0]; // shown on the card; not used for scoring
     const success = platformSuccess(referrals.filter((r) => r.npi === p.npi));
     const capacity = app ? capacityFor(app, referrals) : undefined;
     const years = p.enumerationDate ? (Date.now() - new Date(p.enumerationDate).getTime()) / (365.25 * 24 * 3600 * 1000) : undefined;
@@ -112,10 +118,11 @@ export async function matchDoctors(opts: { zip: string; specialty: SpecialtyId; 
       distanceMiles: d,
       radiusMiles: radius,
       mipsScore: mips.get(p.npi)?.finalScore,
+      mipsSource: mips.get(p.npi)?.source,
       procedurePercentile: bestProc?.percentile,
       procedureCount: bestProc?.count,
       yearsRegistered: years,
-      hospital: bestHosp ? { rating: bestHosp.rating, ...bestHosp.mortality } : undefined,
+      hospital: hospAvg,
       platform: success ?? undefined,
       primaryMatch: !!p.primaryTaxonomy && spec.taxonomyCodes.includes(p.primaryTaxonomy.code),
       verifiedOnPlatform: !!app,

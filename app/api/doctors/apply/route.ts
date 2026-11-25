@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { SPECIALTIES, type SpecialtyId } from "@/lib/specialties";
 import { verifyApplication } from "@/lib/verification/verify";
-import { store, newId, newManageToken, type DoctorApplication } from "@/lib/store";
+import { store, newId, type DoctorApplication } from "@/lib/store";
 import { rateLimit } from "@/lib/ratelimit";
 import { UpstreamError } from "@/lib/http";
 
@@ -53,9 +53,7 @@ export async function POST(req: NextRequest) {
     verification,
     createdAt: new Date().toISOString(),
   };
-  const { token, hash } = newManageToken();
-  app.manageTokenHash = hash;
   await store().saveApplication(app);
-  // The manage token is returned exactly once; only its hash is stored.
-  return NextResponse.json({ id: app.id, status: app.status, verification, manageToken: token });
+  // No portal access yet: the link is issued only after identity is confirmed.
+  return NextResponse.json({ id: app.id, status: app.status, verification });
 }

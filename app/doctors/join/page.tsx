@@ -28,8 +28,7 @@ const EMPTY: Form = {
 };
 
 const DECISION = {
-  verified: { title: "You're verified", body: "Your NPI record checks out. Patients whose records match your specialty will start seeing you in their results.", tone: "border-pine bg-pine-wash" },
-  needs_review: { title: "Sent for manual review", body: "Most checks passed, but a reviewer needs to confirm the items marked below. This usually takes one business day.", tone: "border-warn/60 bg-warn-wash" },
+  needs_review: { title: "Application received", body: "Registry details are public, so a reviewer will call the office number in your NPPES record to confirm it's you. You'll get your private practice link then.", tone: "border-warn/60 bg-warn-wash" },
   rejected: { title: "We couldn't verify this application", body: "A required identity check failed. Fix the item marked below and apply again.", tone: "border-alert/50 bg-alert-wash" },
 } as const;
 
@@ -38,8 +37,7 @@ export default function JoinPage() {
   const [lookup, setLookup] = useState<{ state: "idle" | "loading" | "found" | "error"; msg?: string }>({ state: "idle" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ status: keyof typeof DECISION; verification: VerificationReport; manageToken?: string } | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [result, setResult] = useState<{ status: keyof typeof DECISION; verification: VerificationReport} | null>(null);
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((p) => ({ ...p, [k]: v }));
 
@@ -88,9 +86,6 @@ export default function JoinPage() {
           <h1 className="text-[32px] font-semibold">{d.title}</h1>
           <p className="mt-2 text-ink-2">{d.body}</p>
         </div>
-        {result.manageToken && result.status !== "rejected" && (
-          <ManageLink token={result.manageToken} copied={copied} onCopy={() => setCopied(true)} />
-        )}
         <h2 className="mt-10 text-[22px] font-semibold">What we checked</h2>
         <p className="mt-1 text-[14px] text-ink-2">Against the CMS NPI Registry and CMS Doctors &amp; Clinicians data on {new Date(result.verification.checkedAt).toLocaleString()}.</p>
         <div className="mt-6">
@@ -109,8 +104,8 @@ export default function JoinPage() {
       <div>
         <h1 className="max-w-[16ch] text-[clamp(2rem,4.6vw,3.25rem)] font-semibold">Get referrals from patients who need your specialty</h1>
         <p className="mt-4 max-w-[60ch] text-ink-2">
-          Patients upload their records and we match them to the right specialist nearby. Apply with your NPI — we verify you against the
-          federal registry in seconds, and you set how many new patients you can take each week.
+          Patients upload their records and we match them to the right specialist nearby. Apply with your NPI — we check it against the
+          federal registry, confirm it's you by phone, and you set how many new patients you can take each week.
         </p>
 
         {error && <div role="alert" className="mt-6 rounded-lg border border-alert/40 bg-alert-wash px-4 py-3 text-[15px]">{error}</div>}
@@ -168,7 +163,7 @@ export default function JoinPage() {
             <button type="submit" disabled={submitting} className="rounded-lg bg-pine px-6 py-3 font-bold text-pine-ink disabled:opacity-50">
               {submitting ? "Verifying with NPPES…" : "Apply and verify"}
             </button>
-            <p className="mt-3 max-w-[60ch] text-[13px] text-ink-3">By applying you confirm the details are yours. Applications using someone else&apos;s NPI are rejected automatically.</p>
+            <p className="mt-3 max-w-[60ch] text-[13px] text-ink-3">By applying you confirm the details are yours. We confirm every applicant by calling the office listed in NPPES.</p>
           </div>
         </form>
       </div>
@@ -181,7 +176,7 @@ export default function JoinPage() {
               ["Check digit", "Your NPI's Luhn check digit is validated."],
               ["Registry match", "Name, active status, taxonomy and license are compared to your NPPES record."],
               ["CMS footprint", "We look for your MIPS score and hospital affiliations."],
-              ["Decision", "All clear: verified instantly. Anything off: a person reviews it."],
+              ["Identity call", "A reviewer calls your office number from NPPES before you receive any patient requests."],
             ].map(([t, b], i) => (
               <li key={t} className="grid grid-cols-[1.5rem_1fr] gap-3">
                 <span className="font-display font-semibold text-ink-3">{i + 1}</span>
@@ -208,33 +203,3 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function ManageLink({ token, copied, onCopy }: { token: string; copied: boolean; onCopy: () => void }) {
-  const url = typeof window !== "undefined" ? `${window.location.origin}/doctors/manage#${token}` : "";
-  return (
-    <div className="mt-8 rounded-xl border border-rule bg-surface p-5">
-      <h2 className="text-[20px] font-semibold">Save your private practice link</h2>
-      <p className="mt-1 text-[15px] text-ink-2">
-        Use it to set how many new patients you take, pause referrals, and see outcomes. It&apos;s shown only once — anyone with it can change
-        your availability, so keep it like a password.
-      </p>
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-        <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} aria-label="Private practice link" className="min-w-0 flex-1 rounded-lg border border-rule bg-paper px-3 py-2 font-sans text-[14px]" />
-        <button
-          type="button"
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(url);
-              onCopy();
-            } catch {}
-          }}
-          className="rounded-lg bg-ink px-4 py-2 font-bold text-paper"
-        >
-          {copied ? "Copied" : "Copy link"}
-        </button>
-        <a href={url} className="rounded-lg border border-ink px-4 py-2 text-center font-bold">
-          Open
-        </a>
-      </div>
-    </div>
-  );
-}

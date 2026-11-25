@@ -63,10 +63,17 @@ const total: Stat = { n: 0, top1: 0, top3: 0, none: 0 };
 const misses: string[] = [];
 
 // --split=tune evaluates even rows only (used while editing the lexicon);
-// --split=holdout (default) evaluates odd rows, which were never inspected.
+// --split=holdout (default) evaluates odd rows; --split=dedup drops
+// those whose text also appears in an even row. Results on odd rows WERE looked
+// at between lexicon changes, so treat all of these as development scores.
 const split = (process.argv.find((a) => a.startsWith("--split=")) ?? "--split=holdout").slice(8);
+// MTSamples repeats the same text under several specialties; a held-out report
+// whose text also sits in the tuning half isn't held out.
+const norm = (t = "") => t.toLowerCase().split(/\s+/).join(" ").trim();
+const tuneTexts = new Set(rows.filter((_, i) => i % 2 === 0).map((r) => norm(r[iText])));
 for (const [idx, r] of rows.entries()) {
-  if (split !== "all" && idx % 2 !== (split === "tune" ? 0 : 1)) continue;
+  if (split === "dedup" && (idx % 2 === 0 || tuneTexts.has(norm(r[iText])))) continue;
+  if (split !== "all" && split !== "dedup" && idx % 2 !== (split === "tune" ? 0 : 1)) continue;
   const label = r[iSpec]?.trim();
   const text = (r[iText] ?? "").replace(/,\s{2}/g, "\n");
   const expected = LABELS[label];
